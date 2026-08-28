@@ -6,7 +6,7 @@ and risks hitting open-file limits.
 
 import threading
 import chromadb
-from config import CHROMA_PATH
+import config
 
 _client = None
 _lock = threading.Lock()
@@ -19,5 +19,5 @@ def get_chroma_client() -> chromadb.PersistentClient:
         with _lock:
             # Double-checked locking so two threads can't both pass the None check.
             if _client is None:
-                _client = chromadb.PersistentClient(path=CHROMA_PATH)
+                _client = chromadb.PersistentClient(path=config.CHROMA_PATH)
     return _client

@@ -21,9 +21,5 @@ uvicorn[standard]==0.30.6
 python-multipart==0.0.9
 pydantic==2.8.2
 
-# Frontend
-streamlit==1.37.1
-requests==2.32.3
-
 # Config
 python-dotenv==1.0.1
