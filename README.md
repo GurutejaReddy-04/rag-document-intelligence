@@ -1,6 +1,6 @@
 # RAG Document Intelligence
 
-> Production-ready document intelligence system that extracts, vectors, and answers natural language questions over complex PDFs with zero-hallucination citations and exact page-level attribution.
+> Production-ready document intelligence system that extracts, vectors, and answers natural language questions over complex PDFs with strictly grounded responses and verified source citations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
@@ -17,7 +17,7 @@
 Traditional LLM document querying suffers from hallucinated claims and untraceable answers. **RAG Document Intelligence** pairs local semantic search with constrained LLM inference to guarantee answers are grounded strictly in your uploaded documents.
 
 ### Why This Architecture?
-- **Zero-Hallucination Grounding**: Context is injected into Gemini 2.5 Flash via strict API-level `system_instruction` constraints. If the requested information is absent from the document, the model returns a deterministic fallback rather than guessing.
+- **Strictly Grounded Responses**: Context is injected into Gemini 2.5 Flash via strict API-level `system_instruction` constraints. If the requested information is absent from the document, the model returns a deterministic fallback rather than guessing.
 - **Verifiable Page Citations**: Every response includes precise page numbers, source document names, and cosine similarity confidence scores.
 - **Local Embedding Vectorization**: Embeddings are computed locally using `sentence-transformers/all-MiniLM-L6-v2`—reducing API costs and latency during ingestion and retrieval.
 - **Multi-Document & Collection Isolation**: Dynamic ChromaDB collection partitioning allows isolating documents per topic, research paper, or operational unit.
