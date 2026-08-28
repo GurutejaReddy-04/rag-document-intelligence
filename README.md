@@ -1,169 +1,235 @@
 # RAG Document Intelligence
 
-Ask questions against your own PDFs. Upload a document, ask anything in plain English, get an answer with exact page citations — no hallucinations, no reaching outside the document.
+> Production-ready document intelligence system that extracts, vectors, and answers natural language questions over complex PDFs with zero-hallucination citations and exact page-level attribution.
 
-Built with FastAPI + ChromaDB + HuggingFace MiniLM embeddings + Gemini 2.5 Flash, with a Streamlit frontend.
-
----
-
-## How it works
-
-1. A PDF is uploaded and text is extracted page-by-page with PyMuPDF.
-2. Pages are split into overlapping chunks and embedded locally with `all-MiniLM-L6-v2`.
-3. Embeddings are stored in ChromaDB under a named collection.
-4. At query time, the question is embedded with the same model and the top-K most similar chunks are retrieved via cosine similarity.
-5. Retrieved chunks are sent to Gemini 2.5 Flash with a strict system prompt that forces citation of page numbers and filenames.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.112.0-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.37.1-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![ChromaDB](https://img.shields.io/badge/Vector_Store-ChromaDB-purple.svg)](https://www.trychroma.com/)
+[![Google Gemini](https://img.shields.io/badge/LLM-Gemini_2.5_Flash-4285F4.svg?logo=google&logoColor=white)](https://ai.google.dev/)
+[![PyMuPDF](https://img.shields.io/badge/PDF_Engine-PyMuPDF-green.svg)](https://pymupdf.readthedocs.io/)
 
 ---
 
-## Stack
+## Overview
 
-| Layer | Library |
-|---|---|
-| API | FastAPI + Uvicorn |
-| Frontend | Streamlit |
-| PDF parsing | PyMuPDF (fitz) |
-| Chunking | LangChain `RecursiveCharacterTextSplitter` |
-| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` (local) |
-| Vector store | ChromaDB (persistent, cosine distance) |
-| LLM | Google Gemini 2.5 Flash via `google-genai` SDK |
+Traditional LLM document querying suffers from hallucinated claims and untraceable answers. **RAG Document Intelligence** pairs local semantic search with constrained LLM inference to guarantee answers are grounded strictly in your uploaded documents.
+
+### Why This Architecture?
+- **Zero-Hallucination Grounding**: Context is injected into Gemini 2.5 Flash via strict API-level `system_instruction` constraints. If the requested information is absent from the document, the model returns a deterministic fallback rather than guessing.
+- **Verifiable Page Citations**: Every response includes precise page numbers, source document names, and cosine similarity confidence scores.
+- **Local Embedding Vectorization**: Embeddings are computed locally using `sentence-transformers/all-MiniLM-L6-v2`—reducing API costs and latency during ingestion and retrieval.
+- **Multi-Document & Collection Isolation**: Dynamic ChromaDB collection partitioning allows isolating documents per topic, research paper, or operational unit.
 
 ---
 
-## Prerequisites
+## Architecture & Data Flow
 
-- Python 3.10+
-- A [Gemini API key](https://aistudio.google.com/app/apikey) (free tier works)
-- ~500 MB disk for the embedding model on first run
+```mermaid
+flowchart LR
+    subgraph Client["Frontend Layer"]
+        UI["Streamlit UI (frontend/app.py)"]
+    end
 
----
+    subgraph Server["API Layer"]
+        API["FastAPI App (backend/main.py)"]
+    end
 
-## Setup
+    subgraph Pipeline["Ingestion & Retrieval Pipeline"]
+        PDF["PyMuPDF / fitz"]
+        Split["RecursiveCharacterTextSplitter"]
+        Embed["sentence-transformers (all-MiniLM-L6-v2)"]
+        VDB[("ChromaDB (Cosine HNSW)")]
+        LLM["Google Gemini 2.5 Flash (google-genai SDK)"]
+    end
 
-```bash
-git clone https://github.com/GurutejaReddy-04/rag-document-intelligence.git
-cd rag-document-intelligence
-
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-
-pip install -r requirements.txt
-
-cp env.example .env
-# Edit .env and set GEMINI_API_KEY
+    UI -->|Multipart Upload / JSON Query| API
+    API -->|Ingest PDF| PDF --> Split --> Embed --> VDB
+    API -->|Query Vector Search| VDB -->|Top-K Context Chunks| LLM
+    LLM -->|Grounded Answer + Page Citations| API --> UI
 ```
 
 ---
 
-## Running
+## Tech Stack
 
-Start the API and the frontend in separate terminals:
+| Layer | Component | Purpose |
+|---|---|---|
+| **API Framework** | [FastAPI](https://fastapi.tiangolo.com/) | High-performance asynchronous REST endpoints with validation |
+| **User Interface** | [Streamlit](https://streamlit.io/) | Interactive dual-pane web application |
+| **PDF Extraction** | [PyMuPDF (fitz)](https://pymupdf.readthedocs.io/) | Fast, page-by-page non-empty text extraction |
+| **Chunking** | [LangChain Splitters](https://python.langchain.com/) | `RecursiveCharacterTextSplitter` with configurable chunk/overlap sizes |
+| **Embeddings** | [Sentence-Transformers](https://www.sbert.net/) | Local `all-MiniLM-L6-v2` dense vector representations (384 dims) |
+| **Vector Database** | [ChromaDB](https://www.trychroma.com/) | Persistent vector store using HNSW with cosine distance |
+| **LLM Generation** | [Google Gemini 2.5 Flash](https://ai.google.dev/) | Structured generation via the modern `google-genai` SDK |
+
+---
+
+## Project Structure
+
+```text
+.
+├── backend/
+│   ├── config.py       # Centralized environment & runtime configuration
+│   ├── db.py           # Thread-safe ChromaDB PersistentClient singleton
+│   ├── generator.py    # Gemini prompt synthesis with system instruction grounding
+│   ├── ingest.py       # PDF parsing, recursive chunking, and vector persistence
+│   ├── main.py         # FastAPI application with REST endpoints
+│   └── retriever.py    # Semantic similarity search with cosine distance
+├── frontend/
+│   └── app.py          # Streamlit UI for document upload & querying
+├── env.example         # Environment template
+├── LICENSE             # MIT License
+├── requirements.txt    # Production dependencies
+└── README.md
+```
+
+---
+
+## Quick Start
+
+### 1. Prerequisites & Environment Setup
+
+- Python 3.10+
+- A Google AI Studio API Key ([Get a Gemini API Key](https://aistudio.google.com/app/apikey))
 
 ```bash
-# Terminal 1 — backend
-cd backend
-uvicorn main:app --reload --port 8000
+# Clone repository
+git clone https://github.com/GurutejaReddy-04/rag-document-intelligence.git
+cd rag-document-intelligence
 
-# Terminal 2 — frontend
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment variables
+cp env.example .env
+```
+
+Edit your `.env` file and supply your Gemini API key:
+```ini
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
+CHROMA_PATH=chroma_db
+UPLOAD_DIR=data/uploaded_docs
+CHUNK_SIZE=500
+CHUNK_OVERLAP=50
+TOP_K_RESULTS=5
+ALLOWED_ORIGINS=http://localhost:8501
+API_URL=http://localhost:8000
+```
+
+---
+
+### 2. Running the Backend (FastAPI)
+
+Launch the backend API server from the `backend/` directory:
+
+```bash
+cd backend
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The interactive OpenAPI/Swagger documentation will be available at:
+- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
+
+---
+
+### 3. Running the Frontend (Streamlit)
+
+In a separate terminal window (with the virtual environment activated):
+
+```bash
 cd frontend
 streamlit run app.py
 ```
 
-Open [http://localhost:8501](http://localhost:8501).
+Access the web interface at [http://localhost:8501](http://localhost:8501).
 
 ---
 
-## API reference
+## API Reference
 
-The FastAPI docs are available at `http://localhost:8000/docs` when the server is running.
+The FastAPI service exposes the following endpoints:
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/upload` | Ingest a PDF into a named collection |
-| `POST` | `/query` | Ask a question, get a cited answer |
-| `GET` | `/collections` | List all collections |
-| `DELETE` | `/collections/{name}` | Delete a collection |
-| `POST` | `/reset` | Wipe all collections |
-| `GET` | `/health` | Liveness check |
+| Method | Endpoint | Description | Request Body / Parameters |
+|---|---|---|---|
+| `POST` | `/upload` | Ingest a PDF into a designated collection | `file` (multipart), `collection_name` (form), `force` (bool) |
+| `POST` | `/query` | Retrieve context chunks and generate a cited response | `{"question": "string", "collection_name": "string"}` |
+| `GET` | `/collections` | List all active ChromaDB collections | None |
+| `DELETE` | `/collections/{name}` | Delete a collection and its embeddings | Path parameter: `name` |
+| `POST` | `/reset` | Wipe all collections and reset vector database | Query param: `wipe_uploads` (bool) |
+| `GET` | `/health` | Service liveness probe | None |
 
-**Upload example:**
+### cURL Examples
 
+#### Ingest a PDF Document (`POST /upload`)
 ```bash
 curl -X POST http://localhost:8000/upload \
-  -F "file=@report.pdf" \
-  -F "collection_name=q3-report" \
-  -F "force=false"
+  -F "file=@sample_report.pdf" \
+  -F "collection_name=financial_reports" \
+  -F "force=true"
 ```
 
-**Query example:**
-
+#### Query Document with Natural Language (`POST /query`)
 ```bash
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
-  -d '{"question": "What were the key risks?", "collection_name": "q3-report"}'
+  -d '{
+    "question": "What are the primary operational risks highlighted in the Q3 summary?",
+    "collection_name": "financial_reports"
+  }'
+```
+
+**Example Response:**
+```json
+{
+  "answer": "The primary operational risks identified include supply chain bottlenecks and inflationary pressures on component pricing [Page 4, sample_report.pdf].",
+  "sources": [
+    {
+      "page": 4,
+      "source": "sample_report.pdf",
+      "score": 0.2134
+    }
+  ]
+}
+```
+
+#### List Available Collections (`GET /collections`)
+```bash
+curl -X GET http://localhost:8000/collections
 ```
 
 ---
 
-## Configuration
+## Configuration Options
 
-All options are set via environment variables (copy `env.example` to `.env`):
-
-| Variable | Default | Notes |
+| Parameter | Default | Description |
 |---|---|---|
-| `GEMINI_API_KEY` | — | **Required** |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Any Gemini model string |
-| `CHROMA_PATH` | `chroma_db` | Where ChromaDB persists to disk |
-| `UPLOAD_DIR` | `data/uploaded_docs` | Temp storage for uploads |
-| `CHUNK_SIZE` | `500` | Characters per chunk; increase for dense technical docs |
-| `CHUNK_OVERLAP` | `50` | Overlap between chunks |
-| `TOP_K_RESULTS` | `5` | Number of chunks retrieved per query |
-| `ALLOWED_ORIGINS` | `http://localhost:8501` | Comma-separated CORS origins |
-| `API_URL` | `http://localhost:8000` | Backend URL used by the Streamlit frontend |
+| `GEMINI_API_KEY` | *None* | **Required.** Google Gemini API authentication key |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model variant used for generation |
+| `CHROMA_PATH` | `chroma_db` | Disk directory for ChromaDB SQLite & HNSW index persistence |
+| `UPLOAD_DIR` | `data/uploaded_docs` | Temporary directory for handling uploaded files |
+| `CHUNK_SIZE` | `500` | Target character count per text chunk |
+| `CHUNK_OVERLAP` | `50` | Character overlap between consecutive chunks |
+| `TOP_K_RESULTS` | `5` | Number of context chunks retrieved for prompt synthesis |
+| `ALLOWED_ORIGINS` | `http://localhost:8501` | Permitted CORS origins for the FastAPI server |
+| `API_URL` | `http://localhost:8000` | Target backend URL utilized by the Streamlit application |
 
 ---
 
-## Project structure
+## Author & Maintainer
 
-```
-.
-├── backend/
-│   ├── config.py    # Environment variable loading
-│   ├── db.py        # ChromaDB singleton client
-│   ├── generator.py # Gemini prompt assembly and API call
-│   ├── ingest.py    # PDF extraction, chunking, embedding, and storage
-│   ├── main.py      # FastAPI app and route definitions
-│   └── retriever.py # Similarity search against ChromaDB
-├── frontend/
-│   └── app.py       # Streamlit frontend
-├── .gitignore
-├── LICENSE
-├── README.md
-├── env.example
-└── requirements.txt
-```
-
----
-
-## Collection naming rules
-
-ChromaDB enforces constraints on collection names:
-
-- 3 to 63 characters
-- Letters, digits, hyphens (`-`), and underscores (`_`) only
-- Must start and end with a letter or digit
-
-Valid: `q3-report`, `ml_paper_2024`, `my-resume`  
-Invalid: `_test`, `a`, `name with spaces`
-
----
-
-## Re-ingesting a document
-
-By default, uploading a file that already exists in a collection is a no-op (to prevent duplicates). To replace the existing chunks, set `force=true` in the upload form or API call.
+- **Author**: Guruteja Reddy Nallachi
+- **GitHub**: [@GurutejaReddy-04](https://github.com/GurutejaReddy-04)
 
 ---
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
