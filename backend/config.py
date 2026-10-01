@@ -25,5 +25,14 @@ ALLOWED_ORIGINS = [
     for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:8501").split(",")
 ]
 
-if not GEMINI_API_KEY:
+def check_gemini_api_key() -> str:
+    """Validate that GEMINI_API_KEY is configured before making LLM calls."""
+    key = os.getenv("GEMINI_API_KEY")
+    if not key:
+        raise EnvironmentError("GEMINI_API_KEY is not set. Check your .env file.")
+    return key
+
+
+# Fail-fast at import time only in production runtime (not during pytest execution)
+if not GEMINI_API_KEY and not os.getenv("PYTEST_CURRENT_TEST") and not os.getenv("TESTING"):
     raise EnvironmentError("GEMINI_API_KEY is not set. Check your .env file.")

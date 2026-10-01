@@ -15,8 +15,9 @@ import os
 import re
 import shutil
 import tempfile
+import time
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -46,6 +47,15 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    logger.info("Path: %s, Method: %s, Process Time: %.4fs", request.url.path, request.method, process_time)
+    return response
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -86,7 +96,7 @@ class QueryResponse(BaseModel):
 
 # --- routes ---
 @app.post("/upload", summary="Ingest a PDF into a ChromaDB collection")
-async def upload_document(
+def upload_document(
     file:            UploadFile = File(...),
     collection_name: str        = Form(...),
     force:           bool       = Form(False),
@@ -109,7 +119,7 @@ async def upload_document(
 
     try:
         with open(tmp_path, "wb") as f:
-            f.write(await file.read())
+            f.write(file.file.read())
 
         logger.info("Saved upload '%s' -> '%s'", original_name, tmp_path)
 

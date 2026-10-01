@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG Document Intelligence (v1) – Document Q&A</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>RAG Document Intelligence <span style="font-size: 0.5em; opacity: 0.7;">v1</span></h1>
+    <p class="subtitle">Single-tenant document Q&A with page-level citations.</p>
+  </header>
+
+  <div class="layout">
+    <!-- Sidebar: Upload & Collection Management -->
+    <aside class="panel" id="sidebar">
+      <section>
+        <h2>Upload PDF</h2>
+        <label for="fileInput">Choose PDF file</label>
+        <input type="file" id="fileInput" accept=".pdf">
+        <label for="collNameInput">Collection name</label>
+        <input type="text" id="collNameInput" placeholder="e.g. transformer-paper" autocomplete="off">
+        <label class="checkbox-label">
+          <input type="checkbox" id="forceCheckbox"> Force re-ingestion (replace existing chunks)
+        </label>
+        <button id="uploadBtn">Upload & Ingest</button>
+        <div id="uploadFeedback" class="feedback"></div>
+      </section>
+
+      <hr>
+
+      <section>
+        <h2>Manage Collections</h2>
+        <label for="collectionSelect">Available collections</label>
+        <select id="collectionSelect">
+          <option value="">-- loading --</option>
+        </select>
+        <button id="deleteBtn" class="danger">Delete Selected</button>
+        <button id="resetBtn" class="danger">Wipe All Collections</button>
+        <div id="resetConfirm" class="reset-actions" style="display: none;">
+          <p class="reset-warning">This removes every collection. Confirm?</p>
+          <button id="confirmResetBtn">Yes</button>
+          <button id="cancelResetBtn" class="secondary">Cancel</button>
+        </div>
+        <div id="manageFeedback" class="feedback"></div>
+      </section>
+    </aside>
+
+    <!-- Main: Question & Results -->
+    <main class="panel" id="queryPanel">
+      <h2>Ask a Question</h2>
+      <label for="queryCollectionSelect">Collection</label>
+      <select id="queryCollectionSelect"></select>
+      <label for="questionInput">Your question</label>
+      <textarea id="questionInput" rows="3" placeholder="What are the key conclusions?"></textarea>
+      <button id="askBtn">Get Answer</button>
+      <div id="queryFeedback" class="feedback"></div>
+
+      <div id="resultsContainer" style="display: none;">
+        <h3>Answer</h3>
+        <div id="answerDisplay" class="answer-box"></div>
+        <h3>Sources</h3>
+        <div id="sourcesDisplay"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

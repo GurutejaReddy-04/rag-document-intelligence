@@ -1,9 +1,8 @@
 """
 Answer generation via the Gemini API.
 
-The system prompt lives in system_instruction (not the user turn) so the
-model treats grounding rules as a hard constraint rather than a suggestion.
-Uses the google-genai unified SDK (pip install google-genai).
+System instructions and temperature=0.2 steer the model to cite passages
+from provided context. Uses the google-genai SDK.
 """
 
 import logging
@@ -15,8 +14,17 @@ from config import GEMINI_API_KEY, GEMINI_MODEL
 
 logger = logging.getLogger(__name__)
 
-# Module-level client, reused across all requests (thread-safe).
-_client = genai.Client(api_key=GEMINI_API_KEY)
+_client = None
+
+
+def get_client() -> genai.Client:
+    """Return the process-wide genai.Client, instantiating lazily on first call."""
+    global _client
+    if _client is None:
+        from config import check_gemini_api_key
+        key = check_gemini_api_key()
+        _client = genai.Client(api_key=key)
+    return _client
 
 _SYSTEM_PROMPT = """You are a precise document assistant. Your only job is to answer
 questions using the context passages provided below. Rules you must follow:
@@ -52,7 +60,8 @@ Question: {query}
 Answer:"""
 
     try:
-        response = _client.models.generate_content(
+        client = get_client()
+        response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
