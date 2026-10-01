@@ -38,8 +38,10 @@ def test_workspace():
 
     # Point db.py singleton to the test path
     import config
+    import db
     config.CHROMA_PATH = chroma_test_path
     config.UPLOAD_DIR = upload_test_path
+    db._client = None
 
     yield {
         "root": temp_dir,
@@ -48,6 +50,7 @@ def test_workspace():
     }
 
     # Teardown
+    db._client = None
     shutil.rmtree(temp_dir, ignore_errors=True)
 
 
