@@ -63,7 +63,9 @@ Layer 3: Citation Attribution
    [Attribution Flow != Deterministic Entailment Verification]
 ```
 
-1. **Retrieval Relevance $\neq$ Correctness:** ChromaDB returns cosine distance ($0$ to $2$). The frontend visualizes this as a normalized relevance estimate (`(1 - distance/2) * 100`). This is an uncalibrated geometric distance metric, not a statistical confidence probability.
+1. **Retrieval Relevance $\neq$ Correctness:** ChromaDB computes vector similarity using cosine distance ($D_{\text{cosine}} \in [0, 2]$) between query embedding $E_q$ and document chunk embedding $E_d$:
+   $$\text{similarity}(q, d) = \frac{E_q \cdot E_d}{\Vert E_q \Vert \cdot \Vert E_d \Vert}, \quad D_{\text{cosine}}(q, d) = 1 - \text{similarity}(q, d)$$
+   The frontend visualizes this as a normalized relevance estimate (`(1 - distance/2) * 100`). This is an uncalibrated geometric distance metric, not a statistical confidence probability.
 2. **Prompt Constraints $\neq$ Zero-Hallucination Guarantees:** Context is injected into Gemini 2.5 Flash via `system_instruction` with instructions to decline out-of-context questions at low temperature ($0.2$). This steers the model but does not provide a mathematical guarantee against extrapolation or subtle interpolation.
 3. **Citation Attribution $\neq$ Verification:** The pipeline injects chunk metadata (`[Page N | file]`) and instructs the LLM to attribute claims. However, this repository does not include a second-stage claim verifier or NLI entailment model to prove that generated statements strictly follow from the cited text span (for automated evaluation and faithfulness auditing, see [RAGPatrol](https://github.com/GurutejaReddy-04/ragpatrol)).
 
