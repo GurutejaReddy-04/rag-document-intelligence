@@ -14,12 +14,12 @@
 
 ## Portfolio Context & Relationship to CiteBase
 
-This repository serves as the **v1 Foundation** in an engineering progression toward production-grade document intelligence and evaluation:
+This repository serves as the **v1 Foundation** in an engineering progression toward more production-oriented document intelligence and evaluation:
 
 ```mermaid
 flowchart LR
     V1["RAG Document Intelligence (v1)<br/>• Single-tenant baseline<br/>• Local MiniLM embeddings<br/>• Prompt-steered citations<br/>• Vanilla Web UI"]
-    --> CiteBase["CiteBase (Production RAG)<br/>• Multi-tenant API keys<br/>• Hybrid Dense + BM25 RRF<br/>• Cross-Encoder reranking<br/>• Redis caching & async queue"]
+    --> CiteBase["CiteBase (Multi-Tenant RAG Service)<br/>• Multi-tenant API keys<br/>• Hybrid Dense + BM25 RRF<br/>• Cross-Encoder reranking<br/>• Redis caching & async queue"]
     --> RAGPatrol["RAGPatrol (Eval & Observability)<br/>• Precision / Recall / F1 gates<br/>• Faithfulness auditing<br/>• Latency profiling & benchmarks"]
 ```
 
