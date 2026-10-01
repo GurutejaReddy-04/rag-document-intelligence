@@ -1,169 +1,291 @@
-# RAG Document Intelligence
+# RAG Document Intelligence (v1 Foundation)
 
-Ask questions against your own PDFs. Upload a document, ask anything in plain English, get an answer with exact page citations — no hallucinations, no reaching outside the document.
+> Single-tenant baseline document intelligence system pairing local MiniLM semantic embeddings with prompt-constrained Gemini 2.5 Flash generation and page-level attribution.
 
-Built with FastAPI + ChromaDB + HuggingFace MiniLM embeddings + Gemini 2.5 Flash, with a Streamlit frontend.
-
----
-
-## How it works
-
-1. A PDF is uploaded and text is extracted page-by-page with PyMuPDF.
-2. Pages are split into overlapping chunks and embedded locally with `all-MiniLM-L6-v2`.
-3. Embeddings are stored in ChromaDB under a named collection.
-4. At query time, the question is embedded with the same model and the top-K most similar chunks are retrieved via cosine similarity.
-5. Retrieved chunks are sent to Gemini 2.5 Flash with a strict system prompt that forces citation of page numbers and filenames.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.112.0-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![ChromaDB](https://img.shields.io/badge/Vector_Store-ChromaDB-purple.svg)](https://www.trychroma.com/)
+[![Google Gemini](https://img.shields.io/badge/LLM-Gemini_2.5_Flash-4285F4.svg?logo=google&logoColor=white)](https://ai.google.dev/)
+[![PyMuPDF](https://img.shields.io/badge/PDF_Engine-PyMuPDF-green.svg)](https://pymupdf.readthedocs.io/)
+[![CI](https://github.com/GurutejaReddy-04/rag-document-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/GurutejaReddy-04/rag-document-intelligence/actions)
 
 ---
 
-## Stack
+## Portfolio Context & Relationship to CiteBase
 
-| Layer | Library |
-|---|---|
-| API | FastAPI + Uvicorn |
-| Frontend | Streamlit |
-| PDF parsing | PyMuPDF (fitz) |
-| Chunking | LangChain `RecursiveCharacterTextSplitter` |
-| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` (local) |
-| Vector store | ChromaDB (persistent, cosine distance) |
-| LLM | Google Gemini 2.5 Flash via `google-genai` SDK |
+This repository is a v1 baseline for my document intelligence project, which I am iteratively improving in newer repositories.
+
+```mermaid
+flowchart LR
+    V1["RAG Document Intelligence (v1)<br/>• Single-tenant baseline<br/>• Local MiniLM embeddings<br/>• Prompt-steered citations<br/>• Vanilla Web UI"]
+    --> CiteBase["CiteBase (Multi-Tenant RAG Service)<br/>• Multi-tenant API keys<br/>• Hybrid Dense + BM25 RRF<br/>• Cross-Encoder reranking<br/>• Redis caching & async queue"]
+    --> RAGPatrol["RAGPatrol (Eval & Observability)<br/>• Precision / Recall / F1 gates<br/>• Faithfulness auditing<br/>• Latency profiling & benchmarks"]
+```
+
+### Architectural Evolution
+- **What this project established:**
+  - End-to-end single-tenant RAG loop pairing local embeddings with cloud LLM generation.
+  - Local CPU embedding vectorization (`sentence-transformers/all-MiniLM-L6-v2`) eliminating per-query embedding API costs and latency.
+  - Persistent ChromaDB collection partitioning per document/topic.
+  - Prompt-steered page-level attribution (`[Page N | file]`) using Gemini 2.5 Flash.
+  - Lightweight zero-dependency vanilla web frontend.
+- **Limitations of the v1 architecture addressed in [CiteBase](https://github.com/GurutejaReddy-04/citebase):**
+  - *Unauthenticated vs Authenticated:* v1 uses unauthenticated endpoints. CiteBase adds API keys (hashed with SHA-256) and isolates data per user in PostgreSQL.
+  - *Dense-Only Retrieval $\to$ Hybrid Dense + BM25Okapi Search:* v1 uses dense cosine similarity exclusively, creating blind spots for exact lexical matches (part numbers, technical codes, product acronyms). CiteBase fuses dense vectors with BM25Okapi sparse search via Reciprocal Rank Fusion (RRF, $k=60$).
+  - *Top-K Distractor Noise $\to$ Cross-Encoder Passage Reranking:* v1 feeds all top-$K$ chunks directly to the generator regardless of distance drift. CiteBase scores passages with `cross-encoder/ms-marco-MiniLM-L-6-v2` and applies a relevance cutoff threshold.
+  - *Request-Path Blocking Ingestion $\to$ Asynchronous Ingestion & Task Polling:* v1 blocks during PDF parsing and embedding inside the HTTP request loop. CiteBase processes documents via `BackgroundTasks` with HTTP 202 Accepted and task state polling.
+  - *Redundant LLM Invocations $\to$ Tenant-Scoped Redis Caching:* v1 hits the LLM on every query. CiteBase caches responses in Redis with tenant TTL, delivering up to 349x speedup on cache hits.
+  - *Hard Retrieval Misses $\to$ Web Search Fallback:* v1 returns a fixed fallback string when context is absent. CiteBase falls back to DuckDuckGo/Tavily with unified reranking.
+- **Common Primitives Retained Across Both:**
+  - PyMuPDF text extraction.
+  - `all-MiniLM-L6-v2` dense embedding representation.
+  - Gemini Flash generation.
+  - Bracketed page-level citation format.
 
 ---
 
-## Prerequisites
+## The Grounding Triad
+
+This project separates the RAG pipeline into three distinct layers:
+
+```text
+Layer 1: Retrieval Relevance
+   Query -> all-MiniLM-L6-v2 -> Chroma HNSW -> Top-K Chunks + Cosine Distance
+   [Distance Metric != Calibrated Confidence Probability]
+
+Layer 2: Prompt Constraints
+   system_instruction -> Temperature 0.2 -> Gemini 2.5 Flash
+   [Control / Steering Mechanism != Mathematical Guarantee]
+
+Layer 3: Citation Attribution
+   Injected [Page N | file] -> LLM generates bracketed citations
+   [Attribution Flow != Deterministic Entailment Verification]
+```
+
+1. **Retrieval Relevance $\neq$ Correctness:** ChromaDB computes vector similarity using cosine distance ($D_{\text{cosine}} \in [0, 2]$) between query embedding $E_q$ and document chunk embedding $E_d$:
+   $$\text{similarity}(q, d) = \frac{E_q \cdot E_d}{\Vert E_q \Vert \cdot \Vert E_d \Vert}, \quad D_{\text{cosine}}(q, d) = 1 - \text{similarity}(q, d)$$
+   The frontend visualizes this as a normalized relevance estimate (`(1 - distance/2) * 100`). This is an uncalibrated geometric distance metric, not a statistical confidence probability.
+2. **Prompt Constraints $\neq$ Zero-Hallucination Guarantees:** Context is injected into Gemini 2.5 Flash via `system_instruction` with instructions to decline out-of-context questions at low temperature ($0.2$). This reduces hallucinations but doesn't eliminate them completely.
+3. **Citation Attribution $\neq$ Verification:** The pipeline injects chunk metadata (`[Page N | file]`) and instructs the LLM to attribute claims. However, this repository does not include a second-stage claim verifier or NLI entailment model to prove that generated statements strictly follow from the cited text span (for automated evaluation and faithfulness auditing, see [RAGPatrol](https://github.com/GurutejaReddy-04/ragpatrol)).
+
+---
+
+## Architecture & Data Flow
+
+```mermaid
+flowchart LR
+    subgraph Client["Frontend Layer"]
+        UI["Vanilla Web UI (HTML5 / CSS3 / ES6)"]
+    end
+
+    subgraph Server["API Layer"]
+        API["FastAPI App (backend/main.py)"]
+        MW["Latency Profiling Middleware (X-Process-Time)"]
+    end
+
+    subgraph Pipeline["Ingestion & Retrieval Pipeline"]
+        PDF["PyMuPDF / fitz"]
+        Split["RecursiveCharacterTextSplitter"]
+        Embed["sentence-transformers (all-MiniLM-L6-v2)"]
+        VDB[("ChromaDB (Cosine HNSW)")]
+        LLM["Google Gemini 2.5 Flash (google-genai SDK)"]
+    end
+
+    UI -->|Multipart Upload / JSON Query| API
+    API --> MW
+    API -->|Ingest PDF| PDF --> Split --> Embed --> VDB
+    API -->|Query Vector Search| VDB -->|Top-K Context Chunks| LLM
+    LLM -->|Prompt-Constrained Answer + Page Attribution| API --> UI
+```
+
+---
+
+## Tech Stack
+
+| Layer | Component | Purpose |
+|---|---|---|
+| **API Framework** | [FastAPI](https://fastapi.tiangolo.com/) | Asynchronous REST endpoints with Pydantic validation & latency profiling |
+| **Frontend UI** | Vanilla HTML5 / CSS3 / JS | Lightweight, dependency-free dual-pane interface |
+| **PDF Extraction** | [PyMuPDF (fitz)](https://pymupdf.readthedocs.io/) | Fast, page-by-page text stream extraction |
+| **Chunking** | [LangChain Splitters](https://python.langchain.com/) | `RecursiveCharacterTextSplitter` with configurable chunk size and overlap |
+| **Embeddings** | [Sentence-Transformers](https://www.sbert.net/) | Local `all-MiniLM-L6-v2` dense vectors (384 dimensions) on CPU |
+| **Vector Database** | [ChromaDB](https://www.trychroma.com/) | Persistent vector store using HNSW with cosine distance |
+| **LLM Generation** | [Google Gemini 2.5 Flash](https://ai.google.dev/) | Prompt-constrained synthesis via the unified `google-genai` SDK |
+
+---
+
+## Frontend Modernization
+
+The original Streamlit interface was intentionally migrated to a **lightweight, dependency-free vanilla web frontend** (`HTML5`, `CSS3`, `JavaScript`):
+- **Decoupled Client:** The frontend runs as a static client in any web browser without requiring a Python-based UI server.
+- **Eliminated Reload Overhead:** Avoids full-page Python script re-execution on every widget interaction.
+- **Reduced Surface Area:** Removes `streamlit` and `requests` dependencies from production requirements.
+
+---
+
+## Architecture & System Limitations
+
+To demonstrate transparent engineering maturity, the following architectural boundaries and trade-offs are explicitly documented:
+
+- **Document Extraction:** Uses PyMuPDF text stream extraction (`page.get_text()`) with no optical character recognition (OCR). Image-only or scanned PDFs yield empty text.
+- **Structural Layout:** Tables, figures, diagrams, multi-column layouts, and mathematical formulas are flattened into linear character sequences without layout reconstruction.
+- **Retrieval Bounds:** Uses fixed top-$K$ dense retrieval with no minimum distance score cutoff threshold and no cross-encoder passage reranker. Semantic drift in large corpora can cause distractor chunks to reach the prompt.
+- **Generation Bounds:** Prompt instructions and low temperature ($0.2$) steer generation but cannot mathematically guarantee complete factual consistency or immunity to prompt leakage.
+- **Citation Bounds:** Page and source metadata are supplied to the LLM, but generated citations are not independently audited against source spans by an automated verification layer.
+- **Deployment & Scalability:** Operates against an embedded SQLite-backed ChromaDB client (`PersistentClient`), designed for single-node local execution rather than horizontally scaled multi-worker clusters.
+- **Security & Authorization:** The API provides no authentication or authorization layer. The endpoints (`/upload`, `/query`, `/collections`, `DELETE /collections/{name}`, and `POST /reset`) are unprotected. Collection naming provides logical organization only, not security-grade tenant isolation.
+
+---
+
+## Project Structure
+
+```text
+.
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # GitHub Actions CI matrix workflow
+├── backend/
+│   ├── config.py               # Environment configuration & lazy credential validation
+│   ├── db.py                   # Thread-safe ChromaDB PersistentClient singleton
+│   ├── generator.py            # Gemini prompt assembly & lazy client management
+│   ├── ingest.py               # PDF parsing, recursive chunking, and ChromaDB persistence
+│   ├── main.py                 # FastAPI application, routes, and latency middleware
+│   └── retriever.py            # Semantic similarity search with cosine distance
+├── frontend/
+│   ├── app.js                  # Vanilla JS API integration & DOM manipulation
+│   ├── index.html              # Clean dual-pane application interface
+│   └── styles.css              # Responsive custom stylesheet
+├── tests/
+│   ├── conftest.py             # Shared fixtures, isolated temp storage, mock GenAI client
+│   ├── test_api.py             # REST routes, validation regex, and CRUD integration tests
+│   ├── test_config.py          # Configuration defaults & missing credential failure tests
+│   ├── test_generator.py       # Deterministic fallbacks, prompt assembly, error handling
+│   ├── test_ingest.py          # PDF text parsing, chunking, deduplication, force replace
+│   └── test_retriever.py       # Top-K semantic retrieval and empty collection behavior
+├── .gitignore
+├── env.example
+├── LICENSE
+├── requirements-dev.txt        # Pytest & HTTP test dependencies
+├── requirements.txt            # Production runtime dependencies
+└── README.md
+```
+
+---
+
+## Quick Start
+
+### 1. Prerequisites & Environment Setup
 
 - Python 3.10+
-- A [Gemini API key](https://aistudio.google.com/app/apikey) (free tier works)
-- ~500 MB disk for the embedding model on first run
-
----
-
-## Setup
+- A Google AI Studio API Key ([Get a Gemini API Key](https://aistudio.google.com/app/apikey))
 
 ```bash
+# Clone repository
 git clone https://github.com/GurutejaReddy-04/rag-document-intelligence.git
 cd rag-document-intelligence
 
+# Create and activate virtual environment
 python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
+# Install runtime dependencies
 pip install -r requirements.txt
 
+# Configure environment variables
 cp env.example .env
-# Edit .env and set GEMINI_API_KEY
+```
+
+Edit your `.env` file and supply your Gemini API key:
+```ini
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
+CHROMA_PATH=chroma_db
+UPLOAD_DIR=data/uploaded_docs
+CHUNK_SIZE=500
+CHUNK_OVERLAP=50
+TOP_K_RESULTS=5
+ALLOWED_ORIGINS=http://localhost:8501,http://localhost:3000
 ```
 
 ---
 
-## Running
+### 2. Running the Backend API
 
-Start the API and the frontend in separate terminals:
+Launch the FastAPI backend server from the `backend/` directory:
 
 ```bash
-# Terminal 1 — backend
 cd backend
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 
-# Terminal 2 — frontend
+The interactive OpenAPI/Swagger documentation is available at:
+- **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Health Check:** [http://localhost:8000/health](http://localhost:8000/health)
+
+---
+
+### 3. Running the Frontend
+
+Serve the vanilla frontend with any static file server:
+
+```bash
+# In a separate terminal
 cd frontend
-streamlit run app.py
+python -m http.server 8501
 ```
 
-Open [http://localhost:8501](http://localhost:8501).
+Access the interface at [http://localhost:8501](http://localhost:8501).
 
 ---
 
-## API reference
+## Automated Testing & CI
 
-The FastAPI docs are available at `http://localhost:8000/docs` when the server is running.
+A complete automated test suite is provided in `tests/`, covering deterministic unit tests, API integration, isolated Chroma state, and configuration failure behavior.
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/upload` | Ingest a PDF into a named collection |
-| `POST` | `/query` | Ask a question, get a cited answer |
-| `GET` | `/collections` | List all collections |
-| `DELETE` | `/collections/{name}` | Delete a collection |
-| `POST` | `/reset` | Wipe all collections |
-| `GET` | `/health` | Liveness check |
+### Clean-Clone Credential-Free Test Execution
 
-**Upload example:**
+The test suite is fully decoupled from live cloud credentials using isolated fixtures and SDK mocking. You can run the entire regression suite without setting a real `GEMINI_API_KEY`:
 
 ```bash
-curl -X POST http://localhost:8000/upload \
-  -F "file=@report.pdf" \
-  -F "collection_name=q3-report" \
-  -F "force=false"
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run full test suite
+pytest -v tests/
 ```
 
-**Query example:**
-
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What were the key risks?", "collection_name": "q3-report"}'
-```
+### Tested Scenarios
+- **Ingestion:** Page-by-page text loading, blank/image-only PDF handling, malformed/corrupted PDF rejection, recursive chunking with overlap, metadata attribution, deduplication skipping, and `force=True` re-ingestion.
+- **Retrieval:** Cosine distance ranking, top-$K$ slicing, empty/non-existent collection handling, and **cross-collection document isolation** (verifying zero cross-collection chunk leakage).
+- **Generation:** Deterministic empty-context fallback (`"No relevant content was found..."`), prompt assembly with `[Page N | file]` brackets, and SDK exception propagation.
+- **API & Routes:** `/health` liveness probe, collection name validation regex, upload validation (non-PDF rejection, malformed PDF error handling), query validation (empty question rejection), collection deletion (200 & 404), and full system reset.
+- **Configuration:** Parameter defaults and `EnvironmentError` verification on missing credentials.
 
 ---
 
-## Configuration
+## API Reference
 
-All options are set via environment variables (copy `env.example` to `.env`):
+| Method | Endpoint | Description | Request Body / Parameters |
+|---|---|---|---|
+| `POST` | `/upload` | Ingest a PDF into a designated collection | `file` (multipart), `collection_name` (form), `force` (bool) |
+| `POST` | `/query` | Retrieve context chunks and generate a cited response | `{"question": "string", "collection_name": "string"}` |
+| `GET` | `/collections` | List all active ChromaDB collections | None |
+| `DELETE` | `/collections/{name}` | Delete a collection and its embeddings | Path parameter: `name` |
+| `POST` | `/reset` | Wipe all collections and reset vector database | Query param: `wipe_uploads` (bool) |
+| `GET` | `/health` | Service liveness probe with latency header | None |
 
-| Variable | Default | Notes |
-|---|---|---|
-| `GEMINI_API_KEY` | — | **Required** |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Any Gemini model string |
-| `CHROMA_PATH` | `chroma_db` | Where ChromaDB persists to disk |
-| `UPLOAD_DIR` | `data/uploaded_docs` | Temp storage for uploads |
-| `CHUNK_SIZE` | `500` | Characters per chunk; increase for dense technical docs |
-| `CHUNK_OVERLAP` | `50` | Overlap between chunks |
-| `TOP_K_RESULTS` | `5` | Number of chunks retrieved per query |
-| `ALLOWED_ORIGINS` | `http://localhost:8501` | Comma-separated CORS origins |
-| `API_URL` | `http://localhost:8000` | Backend URL used by the Streamlit frontend |
+*Note: All API responses include an `X-Process-Time` header tracking server-side request processing duration.*
 
 ---
 
-## Project structure
+## Author & Maintainer
 
-```
-.
-├── backend/
-│   ├── config.py    # Environment variable loading
-│   ├── db.py        # ChromaDB singleton client
-│   ├── generator.py # Gemini prompt assembly and API call
-│   ├── ingest.py    # PDF extraction, chunking, embedding, and storage
-│   ├── main.py      # FastAPI app and route definitions
-│   └── retriever.py # Similarity search against ChromaDB
-├── frontend/
-│   └── app.py       # Streamlit frontend
-├── .gitignore
-├── LICENSE
-├── README.md
-├── env.example
-└── requirements.txt
-```
-
----
-
-## Collection naming rules
-
-ChromaDB enforces constraints on collection names:
-
-- 3 to 63 characters
-- Letters, digits, hyphens (`-`), and underscores (`_`) only
-- Must start and end with a letter or digit
-
-Valid: `q3-report`, `ml_paper_2024`, `my-resume`  
-Invalid: `_test`, `a`, `name with spaces`
-
----
-
-## Re-ingesting a document
-
-By default, uploading a file that already exists in a collection is a no-op (to prevent duplicates). To replace the existing chunks, set `force=true` in the upload form or API call.
+- **Author**: Guruteja Reddy Nallachi
+- **GitHub**: [@GurutejaReddy-04](https://github.com/GurutejaReddy-04)
 
 ---
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
