@@ -48,6 +48,19 @@ def test_upload_non_pdf_rejected(client):
     assert "Only PDF files are supported" in response.json()["detail"]
 
 
+def test_upload_malformed_pdf_handled(client, malformed_file):
+    """Verify uploading a corrupt or malformed PDF is handled gracefully with an error response."""
+    with open(malformed_file, "rb") as f:
+        response = client.post(
+            "/upload",
+            files={"file": ("corrupt.pdf", f, "application/pdf")},
+            data={"collection_name": "malformed-test-coll", "force": "true"},
+        )
+    # Server should return 500 with descriptive error detail rather than crashing unhandled
+    assert response.status_code == 500
+    assert "detail" in response.json()
+
+
 def test_upload_and_query_flow(client, sample_pdf):
     """Test full upload followed by query and cited response."""
     coll = "e2e-test-collection"

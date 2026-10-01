@@ -254,10 +254,10 @@ pytest -v tests/
 ```
 
 ### Tested Scenarios
-- **Ingestion:** Page-by-page text loading, blank/image-only PDF rejection, recursive chunking with overlap, metadata attribution, deduplication skipping, and `force=True` re-ingestion.
-- **Retrieval:** Cosine distance ranking, top-$K$ slicing, and empty/non-existent collection handling.
+- **Ingestion:** Page-by-page text loading, blank/image-only PDF handling, malformed/corrupted PDF rejection, recursive chunking with overlap, metadata attribution, deduplication skipping, and `force=True` re-ingestion.
+- **Retrieval:** Cosine distance ranking, top-$K$ slicing, empty/non-existent collection handling, and **cross-collection document isolation** (verifying zero cross-collection chunk leakage).
 - **Generation:** Deterministic empty-context fallback (`"No relevant content was found..."`), prompt assembly with `[Page N | file]` brackets, and SDK exception propagation.
-- **API & Routes:** `/health` liveness probe, collection name validation regex, upload validation (non-PDF rejection), query validation (empty question rejection), collection deletion (200 & 404), and full system reset.
+- **API & Routes:** `/health` liveness probe, collection name validation regex, upload validation (non-PDF rejection, malformed PDF error handling), query validation (empty question rejection), collection deletion (200 & 404), and full system reset.
 - **Configuration:** Parameter defaults and `EnvironmentError` verification on missing credentials.
 
 ---

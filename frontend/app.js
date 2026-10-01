@@ -135,13 +135,26 @@ askBtn.addEventListener('click', async () => {
     resultsContainer.style.display = 'block';
     answerDisplay.textContent = data.answer;
     // Cosine distance (0-2) -> similarity percentage
-    sourcesDisplay.innerHTML = data.sources.map(s => {
+    sourcesDisplay.innerHTML = '';
+    (data.sources || []).forEach(s => {
+      const card = document.createElement('div');
+      card.className = 'source-card';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'source-name';
+      nameSpan.textContent = s.source;
+
+      const pageText = document.createTextNode(` — Page ${s.page} `);
+
+      const relevanceSpan = document.createElement('span');
       const similarity = Math.max(0, 1 - s.score / 2) * 100;
-      return `<div class="source-card">
-        <span class="source-name">${s.source}</span> — Page ${s.page}
-        <span>relevance: ${similarity.toFixed(0)}%</span>
-      </div>`;
-    }).join('');
+      relevanceSpan.textContent = `relevance: ${similarity.toFixed(0)}%`;
+
+      card.appendChild(nameSpan);
+      card.appendChild(pageText);
+      card.appendChild(relevanceSpan);
+      sourcesDisplay.appendChild(card);
+    });
   } catch (err) {
     showFeedback(queryFeedback, `Query failed: ${err.message}`, 'error');
   } finally {

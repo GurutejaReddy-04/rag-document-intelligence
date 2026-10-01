@@ -70,3 +70,9 @@ def test_ingest_pdf_pipeline(sample_pdf):
     collection_name = "test-pipeline-collection"
     msg = ingest_pdf(sample_pdf, collection_name, force=True, source_name="pipeline_test.pdf")
     assert "chunks stored in collection" in msg
+
+
+def test_load_pdf_malformed_raises_error(malformed_file):
+    """Test that corrupt or unparseable PDFs raise an error rather than silently proceeding."""
+    with pytest.raises(Exception):
+        load_pdf(malformed_file)
