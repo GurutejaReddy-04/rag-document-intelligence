@@ -29,7 +29,13 @@ const sourcesDisplay       = document.getElementById('sourcesDisplay');
 
 /* Utility: show feedback message with class */
 function showFeedback(element, message, type = '') {
-  element.innerHTML = message ? `<div class="${type}">${message}</div>` : '';
+  element.textContent = '';
+  if (message) {
+    const div = document.createElement('div');
+    if (type) div.className = type;
+    div.textContent = message;
+    element.appendChild(div);
+  }
 }
 
 /* Fetch and populate both collection dropdowns */
@@ -40,7 +46,11 @@ async function loadCollections() {
     const data = await response.json();
     const names = data.collections || [];
     [collectionSelect, queryCollectionSelect].forEach(select => {
-      select.innerHTML = '<option value="">-- select --</option>';
+      select.textContent = '';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = '-- select --';
+      select.appendChild(defaultOpt);
       names.forEach(name => {
         const option = document.createElement('option');
         option.value = name;
@@ -135,7 +145,7 @@ askBtn.addEventListener('click', async () => {
     resultsContainer.style.display = 'block';
     answerDisplay.textContent = data.answer;
     // Cosine distance (0-2) -> similarity percentage
-    sourcesDisplay.innerHTML = '';
+    sourcesDisplay.textContent = '';
     (data.sources || []).forEach(s => {
       const card = document.createElement('div');
       card.className = 'source-card';
