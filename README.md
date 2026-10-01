@@ -14,7 +14,7 @@
 
 ## Portfolio Context & Relationship to CiteBase
 
-This repository serves as the **v1 Foundation** in an engineering progression toward more production-oriented document intelligence and evaluation:
+This repository is a v1 baseline for my document intelligence project, which I am iteratively improving in newer repositories.
 
 ```mermaid
 flowchart LR
@@ -31,7 +31,7 @@ flowchart LR
   - Prompt-steered page-level attribution (`[Page N | file]`) using Gemini 2.5 Flash.
   - Lightweight zero-dependency vanilla web frontend.
 - **Limitations of the v1 architecture addressed in [CiteBase](https://github.com/GurutejaReddy-04/citebase):**
-  - *Logical Collections $\to$ Cryptographic Multi-Tenancy:* v1 relies on unauthenticated endpoints with user-supplied collection names. CiteBase introduces SHA-256 API key hashing, tenant-isolated vector namespaces (`t_{tenant_id}_{collection}`), and PostgreSQL relational boundaries.
+  - *Unauthenticated vs Authenticated:* v1 uses unauthenticated endpoints. CiteBase adds API keys (hashed with SHA-256) and isolates data per user in PostgreSQL.
   - *Dense-Only Retrieval $\to$ Hybrid Dense + BM25Okapi Search:* v1 uses dense cosine similarity exclusively, creating blind spots for exact lexical matches (part numbers, technical codes, product acronyms). CiteBase fuses dense vectors with BM25Okapi sparse search via Reciprocal Rank Fusion (RRF, $k=60$).
   - *Top-K Distractor Noise $\to$ Cross-Encoder Passage Reranking:* v1 feeds all top-$K$ chunks directly to the generator regardless of distance drift. CiteBase scores passages with `cross-encoder/ms-marco-MiniLM-L-6-v2` and applies a relevance cutoff threshold.
   - *Request-Path Blocking Ingestion $\to$ Asynchronous Ingestion & Task Polling:* v1 blocks during PDF parsing and embedding inside the HTTP request loop. CiteBase processes documents via `BackgroundTasks` with HTTP 202 Accepted and task state polling.
@@ -47,7 +47,7 @@ flowchart LR
 
 ## The Grounding Triad
 
-To maintain technical credibility, this project explicitly distinguishes between three independent layers of a RAG pipeline:
+This project separates the RAG pipeline into three distinct layers:
 
 ```text
 Layer 1: Retrieval Relevance
@@ -66,7 +66,7 @@ Layer 3: Citation Attribution
 1. **Retrieval Relevance $\neq$ Correctness:** ChromaDB computes vector similarity using cosine distance ($D_{\text{cosine}} \in [0, 2]$) between query embedding $E_q$ and document chunk embedding $E_d$:
    $$\text{similarity}(q, d) = \frac{E_q \cdot E_d}{\Vert E_q \Vert \cdot \Vert E_d \Vert}, \quad D_{\text{cosine}}(q, d) = 1 - \text{similarity}(q, d)$$
    The frontend visualizes this as a normalized relevance estimate (`(1 - distance/2) * 100`). This is an uncalibrated geometric distance metric, not a statistical confidence probability.
-2. **Prompt Constraints $\neq$ Zero-Hallucination Guarantees:** Context is injected into Gemini 2.5 Flash via `system_instruction` with instructions to decline out-of-context questions at low temperature ($0.2$). This steers the model but does not provide a mathematical guarantee against extrapolation or subtle interpolation.
+2. **Prompt Constraints $\neq$ Zero-Hallucination Guarantees:** Context is injected into Gemini 2.5 Flash via `system_instruction` with instructions to decline out-of-context questions at low temperature ($0.2$). This reduces hallucinations but doesn't eliminate them completely.
 3. **Citation Attribution $\neq$ Verification:** The pipeline injects chunk metadata (`[Page N | file]`) and instructs the LLM to attribute claims. However, this repository does not include a second-stage claim verifier or NLI entailment model to prove that generated statements strictly follow from the cited text span (for automated evaluation and faithfulness auditing, see [RAGPatrol](https://github.com/GurutejaReddy-04/ragpatrol)).
 
 ---
